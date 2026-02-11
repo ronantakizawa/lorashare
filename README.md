@@ -120,7 +120,7 @@ checkpoint/
 
 ## API Reference
 
-### `SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95)`
+`SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95)`
 
 Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs.
 
@@ -128,27 +128,27 @@ Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs
 - `num_components`: `int` or `"auto"` for explained-variance selection
 - `variance_threshold`: target explained variance when using `"auto"` (default 0.95)
 
-### `SHAREModel.from_pretrained(path)`
+`SHAREModel.from_pretrained(path)`
 
 Load a saved SHARE checkpoint.
 
-### `share.reconstruct(adapter_name, output_dir=None)`
+`share.reconstruct(adapter_name, output_dir=None)`
 
 Reconstruct a single adapter's LoRA weights. Optionally save as standard PEFT format.
 
-### `share.apply(base_model, adapter_name)`
+`share.apply(base_model, adapter_name)`
 
 Reconstruct and apply adapter to a base model. Returns a standard `peft.PeftModel`.
 
-### `share.save_pretrained(output_dir)`
+`share.save_pretrained(output_dir)`
 
 Save SHARE checkpoint to disk.
 
-### `share.summary()`
+ `share.summary()`
 
 Print compression statistics.
 
-### `share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
+ `share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
 
 Compute per-layer reconstruction error (relative Frobenius norm).
 
