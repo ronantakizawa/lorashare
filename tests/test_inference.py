@@ -1,7 +1,6 @@
 """Integration test: Verify reconstructed adapters work for inference."""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest

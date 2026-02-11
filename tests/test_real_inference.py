@@ -4,7 +4,6 @@ Tests that reconstructed adapters can generate predictions.
 """
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -70,7 +69,7 @@ class TestRealModelInference:
     def test_reconstructed_adapter_forward_pass(self, tmp_path):
         """Test that reconstructed adapter can do forward pass on real model."""
         try:
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            from transformers import AutoModelForSequenceClassification
             from peft import PeftModel
         except ImportError:
             pytest.skip("transformers and peft not installed")
@@ -194,7 +193,7 @@ class TestRealModelInference:
         adapter1_path = tmp_path / "adapter1"
         adapter2_path = tmp_path / "adapter2"
 
-        weights1 = create_peft_lora_adapter(adapter1_path, num_labels=2)
+        create_peft_lora_adapter(adapter1_path, num_labels=2)
         weights2 = create_peft_lora_adapter(adapter2_path, num_labels=2)
 
         # Make classifier weights very different
