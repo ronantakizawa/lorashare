@@ -102,6 +102,26 @@ lorashare reconstruct ./compressed --adapter cola -o ./reconstructed
 lorashare reconstruct ./compressed --all -o ./reconstructed
 ```
 
+### Managing Adapters
+
+```python
+# Add a new adapter to an existing compressed model
+result = share.add_adapter("path/to/sst2_lora", name="sst2")
+# Fast path (projection) if it fits the existing subspace,
+# otherwise recomputes automatically
+print(result["method"])  # "projection" or "recompute"
+
+# Remove an adapter
+share.remove_adapter("rte_lora")
+
+# Skip corrupted/unavailable adapters during compression
+share = SHAREModel.from_adapters(
+    ["path/to/adapter1", "path/to/broken_adapter", "path/to/adapter3"],
+    num_components=32,
+    on_error="skip",  # logs warning and continues (default: "raise")
+)
+```
+
 ### Scalability Features (v0.2.0)
 
 ```python
@@ -217,13 +237,14 @@ Use `logging.DEBUG` for more detailed output (per-adapter progress).
 
 ## API Reference
 
-`SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95)`
+`SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95, on_error="raise")`
 
 Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs.
 
 - `adapters`: `list[str]` or `dict[str, str]` (name -> path mapping)
 - `num_components`: `int` or `"auto"` for explained-variance selection
 - `variance_threshold`: target explained variance when using `"auto"` (default 0.95)
+- `on_error`: `"raise"` (default) to abort on failure, `"skip"` to skip bad adapters and continue
 
 `SHAREModel.from_pretrained(path)`
 
@@ -237,15 +258,28 @@ Reconstruct a single adapter's LoRA weights. Optionally save as standard PEFT fo
 
 Reconstruct and apply adapter to a base model. Returns a standard `peft.PeftModel`.
 
+`share.add_adapter(adapter, name=None, variance_threshold=None, force_recompute=False)`
+
+Add a new adapter to the compressed model. Uses a fast projection path if the existing subspace explains the new adapter well enough, otherwise falls back to full recomputation.
+
+- `adapter`: path or HuggingFace Hub ID
+- `name`: override the inferred adapter name
+- `variance_threshold`: minimum explained variance for the fast path (defaults to model's threshold)
+- `force_recompute`: skip the fast path and always recompute
+
+`share.remove_adapter(adapter_name)`
+
+Remove an adapter from the compressed model. Shared components are kept as-is.
+
 `share.save_pretrained(output_dir)`
 
 Save SHARE checkpoint to disk.
 
- `share.summary()`
+`share.summary()`
 
 Print compression statistics.
 
- `share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
+`share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
 
 Compute per-layer reconstruction error (relative Frobenius norm).
 
