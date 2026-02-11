@@ -5,8 +5,8 @@ import json
 import pytest
 import torch
 
-from peft_share import SHAREModel
-from peft_share.compression import parse_lora_key
+from lorashare import SHAREModel
+from lorashare.compression import parse_lora_key
 
 
 class TestFromAdapters:

@@ -5,13 +5,13 @@ import json
 import pytest
 import torch
 
-from peft_share.config import SHAREConfig
-from peft_share.compression import (
+from lorashare.config import SHAREConfig
+from lorashare.compression import (
     combine_adapter_weights,
     compute_adapter_loadings,
     compute_shared_components,
 )
-from peft_share.io import (
+from lorashare.io import (
     load_peft_adapter,
     load_share_checkpoint,
     save_reconstructed_adapter,

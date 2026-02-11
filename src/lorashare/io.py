@@ -11,7 +11,7 @@ from typing import Any
 import torch
 from safetensors.torch import load_file, save_file
 
-from peft_share.config import SHAREConfig
+from lorashare.config import SHAREConfig
 
 logger = logging.getLogger(__name__)
 

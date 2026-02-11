@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import torch
 
-from peft_share.compression import (
+from lorashare.compression import (
     combine_adapter_weights,
     compute_adapter_loadings,
     compute_compression_stats,
@@ -16,8 +17,8 @@ from peft_share.compression import (
     compute_shared_components,
     reconstruct_adapter_weights,
 )
-from peft_share.config import SHAREConfig
-from peft_share.io import (
+from lorashare.config import SHAREConfig
+from lorashare.io import (
     load_peft_adapter,
     load_share_checkpoint,
     push_share_to_hub,
@@ -25,6 +26,8 @@ from peft_share.io import (
     save_share_checkpoint,
     validate_adapters,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SHAREModel:
@@ -93,29 +96,37 @@ class SHAREModel:
             adapter_map = adapters
 
         # Step 1: Load all adapters
+        logger.info(f"Loading {len(adapter_map)} adapters...")
         all_weights: dict[str, dict[str, torch.Tensor]] = {}
         all_configs: dict[str, dict[str, Any]] = {}
         for name, path in adapter_map.items():
+            logger.debug(f"Loading adapter: {name} from {path}")
             weights, config_dict, _ = load_peft_adapter(path, adapter_name=name)
             all_weights[name] = weights
             all_configs[name] = config_dict
 
         # Step 2: Validate compatibility
+        logger.info("Validating adapter compatibility...")
         validate_adapters(all_configs)
 
         # Step 3: Group weights by (layer, side)
+        logger.info("Grouping weights by layer...")
         combined = combine_adapter_weights(all_weights)
 
         # Step 4-5: Compute shared components
+        logger.info(f"Computing shared components (k={num_components})...")
         components, eigenvalues, k = compute_shared_components(
             combined,
             num_components=num_components,
             variance_threshold=variance_threshold,
         )
+        logger.info(f"Selected {k} components")
 
         # Step 6: Project each adapter onto shared components
+        logger.info("Computing per-adapter loadings...")
         all_loadings: dict[str, dict[str, torch.Tensor]] = {}
         for name, weights in all_weights.items():
+            logger.debug(f"Computing loadings for: {name}")
             all_loadings[name] = compute_adapter_loadings(components, weights)
 
         # Extract metadata from first adapter config

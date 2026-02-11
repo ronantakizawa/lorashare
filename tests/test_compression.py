@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from peft_share.compression import (
+from lorashare.compression import (
     build_lora_key,
     combine_adapter_weights,
     compute_adapter_loadings,

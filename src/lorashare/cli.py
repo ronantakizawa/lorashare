@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
+
+# Configure logging for CLI
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
 
 
 def main() -> None:
@@ -86,7 +93,7 @@ def main() -> None:
 
 
 def _cmd_compress(args: argparse.Namespace) -> None:
-    from peft_share import SHAREModel
+    from lorashare import SHAREModel
 
     num_components: int | str
     if args.num_components == "auto":
@@ -118,14 +125,14 @@ def _cmd_compress(args: argparse.Namespace) -> None:
 
 
 def _cmd_info(args: argparse.Namespace) -> None:
-    from peft_share import SHAREModel
+    from lorashare import SHAREModel
 
     share = SHAREModel.from_pretrained(args.checkpoint)
     share.summary()
 
 
 def _cmd_reconstruct(args: argparse.Namespace) -> None:
-    from peft_share import SHAREModel
+    from lorashare import SHAREModel
 
     share = SHAREModel.from_pretrained(args.checkpoint)
 
