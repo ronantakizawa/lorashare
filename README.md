@@ -27,6 +27,8 @@ Use **lorashare** if you have:
 pip install lorashare
 ```
 
+More on the package: https://pypi.org/project/lorashare/
+
 ## Quick Start
 
 ### Python API
