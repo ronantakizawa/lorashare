@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "peft-share"
+name = "lorashare"
 version = "0.1.0"
 description = "Compress multiple PEFT LoRA adapters into a shared subspace using the SHARE method"
 readme = "README.md"
@@ -29,7 +29,7 @@ dependencies = [
 dev = ["pytest>=7.0", "pytest-cov", "ruff"]
 
 [project.scripts]
-peft-share = "peft_share.cli:main"
+lorashare = "peft_share.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/peft_share"]

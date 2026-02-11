@@ -1,4 +1,4 @@
-"""CLI for peft-share: compress, inspect, and reconstruct LoRA adapters."""
+"""CLI for lorashare: compress, inspect, and reconstruct LoRA adapters."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="peft-share",
+        prog="lorashare",
         description="Compress multiple PEFT LoRA adapters into a shared subspace",
     )
     subparsers = parser.add_subparsers(dest="command")

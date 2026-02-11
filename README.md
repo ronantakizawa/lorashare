@@ -1,4 +1,4 @@
-# peft-share
+# lorashare
 
 Compress multiple PEFT LoRA adapters into a shared subspace. **100x+ memory savings**, zero retraining.
 
@@ -13,7 +13,7 @@ LoRA adapters trained on different tasks share a common low-rank subspace. Inste
 ## Install
 
 ```bash
-pip install peft-share
+pip install lorashare
 ```
 
 ## Quick Start
@@ -52,16 +52,16 @@ share.push_to_hub("username/my-share-model")
 
 ```bash
 # Compress
-peft-share compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32
+lorashare compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32
 
 # Inspect
-peft-share info ./compressed
+lorashare info ./compressed
 
 # Reconstruct single adapter
-peft-share reconstruct ./compressed --adapter cola -o ./reconstructed
+lorashare reconstruct ./compressed --adapter cola -o ./reconstructed
 
 # Reconstruct all
-peft-share reconstruct ./compressed --all -o ./reconstructed
+lorashare reconstruct ./compressed --all -o ./reconstructed
 ```
 
 ### From HuggingFace Hub
