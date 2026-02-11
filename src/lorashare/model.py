@@ -132,7 +132,7 @@ class SHAREModel:
             from lorashare.layerwise import compress_layer_by_layer
 
             # Still need to load configs for validation
-            logger.info(f"Loading adapter configs for validation...")
+            logger.info("Loading adapter configs for validation...")
             all_configs: dict[str, dict[str, Any]] = {}
             all_classifier_heads: dict[str, dict[str, torch.Tensor]] = {}
             for name, path in adapter_map.items():

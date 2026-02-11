@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import warnings
 from typing import Any
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 # ── Key Parsing ──────────────────────────────────────────────────────────────
@@ -175,7 +178,7 @@ def compute_shared_components(
         device = "cpu"
 
     if device == "cuda":
-        logger.info(f"Using GPU acceleration for eigendecomposition")
+        logger.info("Using GPU acceleration for eigendecomposition")
 
     all_eigenvalues: dict[str, torch.Tensor] = {}
     all_eigenvectors: dict[str, torch.Tensor] = {}

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import gc
 import logging
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -18,7 +17,6 @@ from lorashare.compression import (
     compute_adapter_loadings,
     compute_shared_components,
 )
-from lorashare.config import SHAREConfig
 from lorashare.io import load_peft_adapter, validate_adapters
 
 logger = logging.getLogger(__name__)
@@ -223,7 +221,7 @@ def merge_chunks(
         merged_components[group_key] = merged_components[group_key][:, :final_k].contiguous()
         merged_eigenvalues[group_key] = merged_eigenvalues[group_key][:final_k]
 
-    logger.info(f"Meta-PCA complete, re-projecting adapter loadings...")
+    logger.info("Meta-PCA complete, re-projecting adapter loadings...")
 
     # Re-project all adapter loadings onto merged components
     merged_loadings: dict[str, dict[str, torch.Tensor]] = {}
