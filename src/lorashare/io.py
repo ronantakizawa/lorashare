@@ -38,7 +38,7 @@ def _derive_adapter_name(path: str) -> str:
 def load_peft_adapter(
     adapter_path: str,
     adapter_name: str | None = None,
-) -> tuple[dict[str, torch.Tensor], dict[str, Any], str]:
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], dict[str, Any], str]:
     """Load a PEFT LoRA adapter from local path or HuggingFace Hub.
 
     Args:
@@ -46,7 +46,7 @@ def load_peft_adapter(
         adapter_name: Name for this adapter. If None, derived from path.
 
     Returns:
-        Tuple of (state_dict, config_dict, resolved_name).
+        Tuple of (lora_weights, classifier_heads, config_dict, resolved_name).
 
     Raises:
         FileNotFoundError: If adapter weights or config not found.
@@ -72,17 +72,17 @@ def load_peft_adapter(
     else:
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
 
-    # Filter out classifier/task-head weights
+    # Separate LoRA weights from classifier/task-head weights
     lora_keys = {k: v for k, v in state_dict.items() if "lora_" in k}
-    non_lora_keys = [k for k in state_dict if "lora_" not in k]
-    if non_lora_keys:
+    classifier_keys = {k: v for k, v in state_dict.items() if "lora_" not in k}
+    if classifier_keys:
         logger.info(
-            "Adapter %s: skipping %d non-LoRA keys (classifier/head weights)",
+            "Adapter %s: found %d classifier/head weights (will be preserved)",
             resolved_name,
-            len(non_lora_keys),
+            len(classifier_keys),
         )
 
-    return lora_keys, config_dict, resolved_name
+    return lora_keys, classifier_keys, config_dict, resolved_name
 
 
 def _load_local(adapter_path: str) -> tuple[dict[str, Any], str]:
@@ -183,6 +183,7 @@ def save_share_checkpoint(
     components: dict[str, torch.Tensor],
     all_loadings: dict[str, dict[str, torch.Tensor]],
     adapter_configs: dict[str, dict[str, Any]],
+    all_classifier_heads: dict[str, dict[str, torch.Tensor]] | None = None,
     adapter_sources: dict[str, str] | None = None,
 ) -> None:
     """Save SHARE compressed format to disk.
@@ -195,6 +196,7 @@ def save_share_checkpoint(
         └── adapters/
             ├── cola/
             │   ├── loadings.safetensors
+            │   ├── classifier_head.safetensors (if classifier heads exist)
             │   └── adapter_meta.json
             └── ...
     """
@@ -207,11 +209,17 @@ def save_share_checkpoint(
     # Save shared components
     save_file(components, str(out / "shared_components.safetensors"))
 
-    # Save per-adapter loadings
+    # Save per-adapter loadings and classifier heads
     for adapter_name, loadings in all_loadings.items():
         adapter_dir = out / "adapters" / adapter_name
         adapter_dir.mkdir(parents=True, exist_ok=True)
         save_file(loadings, str(adapter_dir / "loadings.safetensors"))
+
+        # Save classifier heads if they exist
+        if all_classifier_heads and adapter_name in all_classifier_heads:
+            classifier_heads = all_classifier_heads[adapter_name]
+            if classifier_heads:
+                save_file(classifier_heads, str(adapter_dir / "classifier_head.safetensors"))
 
         # Save adapter metadata
         meta = {
@@ -231,11 +239,12 @@ def load_share_checkpoint(
     dict[str, torch.Tensor],
     dict[str, dict[str, torch.Tensor]],
     dict[str, dict[str, Any]],
+    dict[str, dict[str, torch.Tensor]],
 ]:
     """Load SHARE compressed format from disk.
 
     Returns:
-        Tuple of (config, components, all_loadings, adapter_configs).
+        Tuple of (config, components, all_loadings, adapter_configs, all_classifier_heads).
     """
     ckpt = Path(checkpoint_dir)
 
@@ -244,6 +253,7 @@ def load_share_checkpoint(
 
     all_loadings: dict[str, dict[str, torch.Tensor]] = {}
     adapter_configs: dict[str, dict[str, Any]] = {}
+    all_classifier_heads: dict[str, dict[str, torch.Tensor]] = {}
 
     adapters_dir = ckpt / "adapters"
     if adapters_dir.exists():
@@ -255,13 +265,18 @@ def load_share_checkpoint(
             if loadings_path.exists():
                 all_loadings[name] = load_file(str(loadings_path))
 
+            # Load classifier heads if they exist
+            classifier_path = adapter_dir / "classifier_head.safetensors"
+            if classifier_path.exists():
+                all_classifier_heads[name] = load_file(str(classifier_path))
+
             meta_path = adapter_dir / "adapter_meta.json"
             if meta_path.exists():
                 with open(meta_path) as f:
                     meta = json.load(f)
                 adapter_configs[name] = meta.get("original_config", {})
 
-    return config, components, all_loadings, adapter_configs
+    return config, components, all_loadings, adapter_configs, all_classifier_heads
 
 
 # ── Reconstructed Adapter I/O ────────────────────────────────────────────────
@@ -271,15 +286,22 @@ def save_reconstructed_adapter(
     output_dir: str | Path,
     weights: dict[str, torch.Tensor],
     original_config: dict[str, Any],
+    classifier_heads: dict[str, torch.Tensor] | None = None,
 ) -> None:
     """Save reconstructed LoRA adapter in standard PEFT format.
 
     Creates ``adapter_config.json`` and ``adapter_model.safetensors``.
+    If classifier_heads are provided, they will be merged into the state dict.
     """
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    save_file(weights, str(out / "adapter_model.safetensors"))
+    # Merge classifier heads with LoRA weights
+    full_state_dict = dict(weights)
+    if classifier_heads:
+        full_state_dict.update(classifier_heads)
+
+    save_file(full_state_dict, str(out / "adapter_model.safetensors"))
 
     with open(out / "adapter_config.json", "w") as f:
         json.dump(original_config, f, indent=2)

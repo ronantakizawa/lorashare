@@ -23,7 +23,7 @@ pip install lorashare
 ### Python API
 
 ```python
-from peft_share import SHAREModel
+from lorashare import SHAREModel
 
 # Compress multiple LoRA adapters into shared subspace
 share = SHAREModel.from_adapters(
@@ -86,6 +86,8 @@ For each layer and side (A/B) across all adapters:
 4. **Project** each adapter onto the top-k components to get compact loadings
 5. **Reconstruct** on demand: `original ~= components @ loadings`
 
+**Classifier Heads**: Task-specific output layers (e.g., `classifier.weight`, `classifier.bias`) are automatically separated during compression and stored alongside each adapter's loadings. During reconstruction, they're merged back in, so reconstructed adapters work immediately for inference without additional setup.
+
 ### Memory Savings
 
 | | 6 LoRA adapters | SHARE (k=32) |
@@ -105,12 +107,16 @@ checkpoint/
   shared_components.safetensors  # Shared PCA basis vectors
   adapters/
     cola/
-      loadings.safetensors       # Per-adapter projections (tiny)
-      adapter_meta.json          # Original PEFT config
+      loadings.safetensors         # Per-adapter projections (tiny)
+      classifier_head.safetensors  # Task-specific classifier heads (if present)
+      adapter_meta.json            # Original PEFT config
     mrpc/
       loadings.safetensors
+      classifier_head.safetensors
       adapter_meta.json
 ```
+
+**Note:** Task-specific classifier heads (like `classifier.weight`) are automatically preserved and merged back during reconstruction, ensuring reconstructed adapters can do inference immediately.
 
 ## Requirements
 
@@ -119,6 +125,26 @@ checkpoint/
 - peft >= 0.6.0
 - transformers >= 4.30.0
 - safetensors >= 0.3.0
+
+## Logging
+
+Enable progress logging to see what's happening:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
+from lorashare import SHAREModel
+share = SHAREModel.from_adapters(adapters, num_components=32)
+# INFO: Loading 3 adapters...
+# INFO: Validating adapter compatibility...
+# INFO: Grouping weights by layer...
+# INFO: Computing shared components (k=32)...
+# INFO: Selected 32 components
+# INFO: Computing per-adapter loadings...
+```
+
+Use `logging.DEBUG` for more detailed output (per-adapter progress).
 
 ## API Reference
 

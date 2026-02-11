@@ -95,7 +95,9 @@ class TestReconstruct:
             list(saved_adapters.values()), num_components=8
         )
         weights = share.reconstruct("cola")
-        for key in weights:
+        # Check that all LoRA keys are valid
+        lora_keys = [k for k in weights if "lora_" in k]
+        for key in lora_keys:
             layer, side = parse_lora_key(key)
             assert side in ("A", "B")
 

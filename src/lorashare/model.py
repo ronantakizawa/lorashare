@@ -53,11 +53,13 @@ class SHAREModel:
         components: dict[str, torch.Tensor],
         all_loadings: dict[str, dict[str, torch.Tensor]],
         adapter_configs: dict[str, dict[str, Any]],
+        all_classifier_heads: dict[str, dict[str, torch.Tensor]] | None = None,
     ) -> None:
         self.config = config
         self.components = components
         self.all_loadings = all_loadings
         self.adapter_configs = adapter_configs
+        self.all_classifier_heads = all_classifier_heads or {}
 
     @classmethod
     def from_adapters(
@@ -84,7 +86,7 @@ class SHAREModel:
         if isinstance(adapters, list):
             adapter_map: dict[str, str] = {}
             for path in adapters:
-                _, _, name = load_peft_adapter(path)
+                _, _, _, name = load_peft_adapter(path)
                 # Handle duplicate names
                 base_name = name
                 counter = 1
@@ -99,11 +101,14 @@ class SHAREModel:
         logger.info(f"Loading {len(adapter_map)} adapters...")
         all_weights: dict[str, dict[str, torch.Tensor]] = {}
         all_configs: dict[str, dict[str, Any]] = {}
+        all_classifier_heads: dict[str, dict[str, torch.Tensor]] = {}
         for name, path in adapter_map.items():
             logger.debug(f"Loading adapter: {name} from {path}")
-            weights, config_dict, _ = load_peft_adapter(path, adapter_name=name)
+            weights, classifier_heads, config_dict, _ = load_peft_adapter(path, adapter_name=name)
             all_weights[name] = weights
             all_configs[name] = config_dict
+            if classifier_heads:
+                all_classifier_heads[name] = classifier_heads
 
         # Step 2: Validate compatibility
         logger.info("Validating adapter compatibility...")
@@ -161,6 +166,7 @@ class SHAREModel:
             components=components,
             all_loadings=all_loadings,
             adapter_configs=all_configs,
+            all_classifier_heads=all_classifier_heads,
         )
 
     @classmethod
@@ -171,12 +177,13 @@ class SHAREModel:
             path: Local directory containing ``share_config.json``,
                 ``shared_components.safetensors``, and ``adapters/`` subdirectory.
         """
-        config, components, all_loadings, adapter_configs = load_share_checkpoint(path)
+        config, components, all_loadings, adapter_configs, all_classifier_heads = load_share_checkpoint(path)
         return cls(
             config=config,
             components=components,
             all_loadings=all_loadings,
             adapter_configs=adapter_configs,
+            all_classifier_heads=all_classifier_heads,
         )
 
     def save_pretrained(self, output_dir: str | Path) -> None:
@@ -187,6 +194,7 @@ class SHAREModel:
             self.components,
             self.all_loadings,
             self.adapter_configs,
+            self.all_classifier_heads,
         )
 
     def push_to_hub(
@@ -218,7 +226,7 @@ class SHAREModel:
             output_dir: Optional path to save reconstructed adapter.
 
         Returns:
-            State dict with standard PEFT LoRA keys.
+            State dict with standard PEFT LoRA keys (including classifier heads).
 
         Raises:
             KeyError: If adapter_name not found.
@@ -232,11 +240,17 @@ class SHAREModel:
         loadings = self.all_loadings[adapter_name]
         weights = reconstruct_adapter_weights(self.components, loadings)
 
+        # Merge classifier heads if available
+        classifier_heads = self.all_classifier_heads.get(adapter_name, {})
+        full_weights = dict(weights)
+        if classifier_heads:
+            full_weights.update(classifier_heads)
+
         if output_dir is not None:
             original_config = self.adapter_configs.get(adapter_name, {})
-            save_reconstructed_adapter(output_dir, weights, original_config)
+            save_reconstructed_adapter(output_dir, weights, original_config, classifier_heads)
 
-        return weights
+        return full_weights
 
     def apply(
         self,
@@ -256,11 +270,13 @@ class SHAREModel:
         """
         from peft import PeftModel
 
-        weights = self.reconstruct(adapter_name)
+        loadings = self.all_loadings[adapter_name]
+        lora_weights = reconstruct_adapter_weights(self.components, loadings)
         original_config = self.adapter_configs.get(adapter_name, {})
+        classifier_heads = self.all_classifier_heads.get(adapter_name, {})
 
         with tempfile.TemporaryDirectory() as tmp:
-            save_reconstructed_adapter(tmp, weights, original_config)
+            save_reconstructed_adapter(tmp, lora_weights, original_config, classifier_heads)
             model = PeftModel.from_pretrained(base_model, tmp)
 
         return model
@@ -324,7 +340,7 @@ class SHAREModel:
             Dict with ``"per_layer"`` errors, ``"mean"`` error, and ``"max"`` error.
         """
         if original_weights is None and original_path is not None:
-            original_weights, _, _ = load_peft_adapter(original_path)
+            original_weights, _, _, _ = load_peft_adapter(original_path)
 
         if original_weights is None:
             raise ValueError(

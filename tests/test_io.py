@@ -25,13 +25,13 @@ from lorashare.io import (
 
 class TestLoadPeftAdapter:
     def test_load_local(self, saved_adapters, synthetic_lora_config):
-        weights, config, name = load_peft_adapter(saved_adapters["cola"])
+        weights, classifier_heads, config, name = load_peft_adapter(saved_adapters["cola"])
         assert name == "cola"
         assert config["peft_type"] == "LORA"
         assert all("lora_" in k for k in weights)
 
     def test_custom_name(self, saved_adapters):
-        _, _, name = load_peft_adapter(saved_adapters["cola"], adapter_name="my_adapter")
+        _, _, _, name = load_peft_adapter(saved_adapters["cola"], adapter_name="my_adapter")
         assert name == "my_adapter"
 
     def test_rejects_non_lora(self, tmp_path):
@@ -48,8 +48,8 @@ class TestLoadPeftAdapter:
         with pytest.raises(FileNotFoundError):
             load_peft_adapter(str(tmp_path / "nonexistent"))
 
-    def test_filters_non_lora_keys(self, tmp_path, synthetic_lora_config):
-        """Non-LoRA keys like classifier.weight should be filtered."""
+    def test_separates_lora_and_classifier_keys(self, tmp_path, synthetic_lora_config):
+        """Non-LoRA keys like classifier.weight should be separated."""
         from safetensors.torch import save_file
         adapter_dir = tmp_path / "with_classifier"
         adapter_dir.mkdir()
@@ -62,8 +62,10 @@ class TestLoadPeftAdapter:
         with open(adapter_dir / "adapter_config.json", "w") as f:
             json.dump(synthetic_lora_config, f)
 
-        loaded, _, _ = load_peft_adapter(str(adapter_dir))
-        assert len(loaded) == 2  # Only LoRA keys
+        lora_weights, classifier_heads, _, _ = load_peft_adapter(str(adapter_dir))
+        assert len(lora_weights) == 2  # Only LoRA keys
+        assert len(classifier_heads) == 1  # Only classifier key
+        assert "base_model.model.classifier.weight" in classifier_heads
 
 
 # ── Validate Adapters ────────────────────────────────────────────────────────
@@ -125,7 +127,7 @@ class TestShareCheckpointRoundTrip:
         save_share_checkpoint(out, config, components, all_loadings, adapter_configs)
 
         # Load
-        loaded_config, loaded_components, loaded_loadings, loaded_adapter_configs = (
+        loaded_config, loaded_components, loaded_loadings, loaded_adapter_configs, loaded_classifier_heads = (
             load_share_checkpoint(out)
         )
 
@@ -159,6 +161,38 @@ class TestShareCheckpointRoundTrip:
             assert (out / "adapters" / name / "loadings.safetensors").exists()
             assert (out / "adapters" / name / "adapter_meta.json").exists()
 
+    def test_classifier_heads_roundtrip(self, tmp_path, synthetic_adapters, synthetic_lora_config):
+        """Test that classifier heads are saved and loaded correctly."""
+        combined = combine_adapter_weights(synthetic_adapters)
+        components, _, k = compute_shared_components(combined, num_components=8)
+        all_loadings = {
+            name: compute_adapter_loadings(components, weights)
+            for name, weights in synthetic_adapters.items()
+        }
+
+        # Add classifier heads
+        all_classifier_heads = {
+            "cola": {"classifier.weight": torch.randn(2, 768), "classifier.bias": torch.randn(2)},
+            "mrpc": {"classifier.weight": torch.randn(2, 768), "classifier.bias": torch.randn(2)},
+        }
+
+        config = SHAREConfig(num_components=k)
+        adapter_configs = {name: synthetic_lora_config for name in synthetic_adapters}
+
+        # Save
+        out = tmp_path / "checkpoint"
+        save_share_checkpoint(out, config, components, all_loadings, adapter_configs, all_classifier_heads)
+
+        # Load
+        _, _, _, _, loaded_classifier_heads = load_share_checkpoint(out)
+
+        # Verify classifier heads are preserved
+        assert "cola" in loaded_classifier_heads
+        assert "mrpc" in loaded_classifier_heads
+        assert "rte" not in loaded_classifier_heads  # rte has no classifier heads
+        assert torch.allclose(loaded_classifier_heads["cola"]["classifier.weight"], all_classifier_heads["cola"]["classifier.weight"])
+        assert torch.allclose(loaded_classifier_heads["cola"]["classifier.bias"], all_classifier_heads["cola"]["classifier.bias"])
+
 
 # ── Reconstructed Adapter ────────────────────────────────────────────────────
 
@@ -178,6 +212,27 @@ class TestSaveReconstructedAdapter:
         with open(out / "adapter_config.json") as f:
             config = json.load(f)
         assert config["peft_type"] == "LORA"
+
+    def test_merges_classifier_heads(self, tmp_path, synthetic_lora_config):
+        """Test that classifier heads are merged into the saved adapter."""
+        from safetensors.torch import load_file
+        weights = {
+            "base_model.model.encoder.layer.0.lora_A.weight": torch.randn(4, 64),
+            "base_model.model.encoder.layer.0.lora_B.weight": torch.randn(64, 4),
+        }
+        classifier_heads = {
+            "classifier.weight": torch.randn(2, 768),
+            "classifier.bias": torch.randn(2),
+        }
+        out = tmp_path / "reconstructed"
+        save_reconstructed_adapter(out, weights, synthetic_lora_config, classifier_heads)
+
+        # Load and verify all weights are present
+        loaded = load_file(str(out / "adapter_model.safetensors"))
+        assert len(loaded) == 4  # 2 LoRA + 2 classifier
+        assert "base_model.model.encoder.layer.0.lora_A.weight" in loaded
+        assert "classifier.weight" in loaded
+        assert "classifier.bias" in loaded
 
 
 # ── Config Round-Trip ────────────────────────────────────────────────────────
