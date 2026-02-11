@@ -1,5 +1,9 @@
 # lorashare
 
+[![PyPI version](https://img.shields.io/pypi/v/lorashare)](https://pypi.org/project/lorashare/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+
 A Python library that lets you use multiple LoRA adapters with **100x memory savings**. 
 
 Based on the [SHARE paper](https://arxiv.org/abs/2602.06043) (Kaushik et al., 2026).
@@ -122,7 +126,7 @@ share = SHAREModel.from_adapters(
 )
 ```
 
-### Scalability Features (v0.2.0)
+### Scalability Features
 
 ```python
 # GPU Acceleration (10-100x speedup)
@@ -237,7 +241,7 @@ Use `logging.DEBUG` for more detailed output (per-adapter progress).
 
 ## API Reference
 
-`SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95, on_error="raise")`
+`SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95, on_error="raise", device=None, layer_by_layer=False, chunk_size=None)`
 
 Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs.
 
@@ -245,10 +249,17 @@ Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs
 - `num_components`: `int` or `"auto"` for explained-variance selection
 - `variance_threshold`: target explained variance when using `"auto"` (default 0.95)
 - `on_error`: `"raise"` (default) to abort on failure, `"skip"` to skip bad adapters and continue
+- `device`: `"cuda"`, `"cpu"`, or `None` for auto-detection. GPU gives 10-100x speedup.
+- `layer_by_layer`: if `True`, processes one layer at a time to reduce peak memory (~70% less)
+- `chunk_size`: `int` or `None`. When set, processes adapters in chunks of this size — enables scaling to 100+ adapters.
 
 `SHAREModel.from_pretrained(path)`
 
 Load a saved SHARE checkpoint.
+
+`share.adapter_names`
+
+Property. Returns a list of adapter names in the compressed model.
 
 `share.reconstruct(adapter_name, output_dir=None)`
 
@@ -275,13 +286,21 @@ Remove an adapter from the compressed model. Shared components are kept as-is.
 
 Save SHARE checkpoint to disk.
 
+`share.push_to_hub(repo_id, **kwargs)`
+
+Push SHARE checkpoint to the HuggingFace Hub. Accepts the same keyword arguments as `huggingface_hub.HfApi.upload_folder`.
+
 `share.summary()`
 
 Print compression statistics.
 
 `share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
 
-Compute per-layer reconstruction error (relative Frobenius norm).
+Compute per-layer reconstruction error (relative Frobenius norm). Returns a dict:
+
+- `per_layer`: `dict[str, float]` — relative error per layer key
+- `mean`: `float` — mean error across all layers
+- `max`: `float` — maximum error across all layers
 
 ## Citation
 
