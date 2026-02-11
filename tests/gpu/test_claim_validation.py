@@ -10,8 +10,6 @@ Claims tested:
 Requires: pre-trained adapters from train_adapters.py
 """
 
-import json
-import os
 from pathlib import Path
 
 import pytest
@@ -21,7 +19,6 @@ from safetensors.torch import load_file
 from lorashare import SHAREModel
 
 from .conftest import (
-    ADAPTER_DIR,
     BASE_MODEL,
     GLUE_TASKS,
     TASK_NAMES,
@@ -263,8 +260,6 @@ class TestAccuracyPreservation:
 
     def test_accuracy_improves_with_more_components(self, adapter_paths, tokenizer):
         """Higher k should yield better reconstruction quality."""
-        from transformers import AutoModelForSequenceClassification
-
         errors = {}
         for k in [4, 16, 32]:
             share = SHAREModel.from_adapters(adapter_paths, num_components=k, device="cuda")

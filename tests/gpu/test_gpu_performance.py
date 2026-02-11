@@ -7,7 +7,6 @@ and chunked processing on actual hardware.
 
 import time
 
-import pytest
 import torch
 
 from lorashare import SHAREModel

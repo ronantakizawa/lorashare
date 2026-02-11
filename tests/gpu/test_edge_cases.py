@@ -14,7 +14,7 @@ from safetensors.torch import save_file
 
 from lorashare import SHAREModel
 
-from .conftest import ADAPTER_DIR, TASK_NAMES, requires_adapters, requires_gpu
+from .conftest import TASK_NAMES, requires_adapters, requires_gpu
 
 
 @requires_adapters

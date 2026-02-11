@@ -6,16 +6,12 @@ as well as the lorashare CLI commands.
 """
 
 import subprocess
-import sys
-from pathlib import Path
 
-import pytest
 import torch
 
 from lorashare import SHAREModel
 
 from .conftest import (
-    ADAPTER_DIR,
     BASE_MODEL,
     TASK_NAMES,
     evaluate_adapter,
@@ -78,7 +74,7 @@ class TestFullPipeline:
         # Add 4th
         fourth_name = list(adapter_paths.keys())[3]
         fourth_path = adapter_paths[fourth_name]
-        result = share.add_adapter(fourth_path, name=fourth_name, device="cuda")
+        share.add_adapter(fourth_path, name=fourth_name, device="cuda")
         assert len(share.adapter_names) == 4
         assert fourth_name in share.adapter_names
 
