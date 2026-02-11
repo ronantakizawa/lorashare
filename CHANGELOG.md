@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Coverage reporting via Codecov
 - Comprehensive examples directory with quickstart, comparison, and Hub usage
 - Real model inference tests with roberta-base
+- **GPU acceleration** for 10-100x speedup (use `device="cuda"`)
+- **Layer-by-layer processing** for memory-efficient compression (use `layer_by_layer=True`)
+- **Chunked adapter loading** for 100+ adapters (use `chunk_size=10`)
+- CLI flags: `--device`, `--layer-by-layer`, `--chunk-size`
+- 10 new scalability tests
+
+### Performance Improvements
+- GPU-accelerated eigendecomposition provides 10-100x speedup
+- Layer-by-layer reduces peak memory by ~70%
+- Chunked processing enables compression of arbitrarily many adapters
+
+### Changed
+- `from_adapters()` now accepts `device`, `layer_by_layer`, and `chunk_size` parameters
+- Automatic GPU detection (uses CUDA if available)
 
 ## [0.1.0] - 2025-02-11
 

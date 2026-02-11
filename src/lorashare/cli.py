@@ -53,6 +53,23 @@ def main() -> None:
         default=None,
         help="Custom names for each adapter (must match adapter count)",
     )
+    compress_p.add_argument(
+        "--device",
+        choices=["cpu", "cuda", "auto"],
+        default="auto",
+        help="Device for computation (default: auto, uses GPU if available)",
+    )
+    compress_p.add_argument(
+        "--layer-by-layer",
+        action="store_true",
+        help="Process one layer at a time (reduces memory usage)",
+    )
+    compress_p.add_argument(
+        "--chunk-size",
+        type=int,
+        default=None,
+        help="Process adapters in chunks (enables 100+ adapters)",
+    )
 
     # ── info ──
     info_p = subparsers.add_parser(
@@ -113,11 +130,25 @@ def _cmd_compress(args: argparse.Namespace) -> None:
     else:
         adapters = args.adapters
 
+    # Determine device
+    device = None if args.device == "auto" else args.device
+
+    # Show configuration
     print(f"Compressing {len(args.adapters)} adapters with k={num_components}...")
+    if device:
+        print(f"Using device: {device}")
+    if args.layer_by_layer:
+        print("Using layer-by-layer processing")
+    if args.chunk_size:
+        print(f"Using chunked processing (chunk_size={args.chunk_size})")
+
     share = SHAREModel.from_adapters(
         adapters,
         num_components=num_components,
         variance_threshold=args.variance,
+        device=device,
+        layer_by_layer=args.layer_by_layer,
+        chunk_size=args.chunk_size,
     )
     share.save_pretrained(args.output)
     share.summary()

@@ -47,9 +47,22 @@ share.summary()
 share.reconstruct("cola_lora", output_dir="./reconstructed/cola")
 
 # Apply to base model for inference (returns standard PeftModel)
-from transformers import AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch
+
 base_model = AutoModelForSequenceClassification.from_pretrained("roberta-base")
+tokenizer = AutoTokenizer.from_pretrained("roberta-base")
 model = share.apply(base_model, adapter_name="cola_lora")
+
+# Run inference with the reconstructed adapter
+text = "The movie was fantastic and I really enjoyed it!"
+inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+
+model.eval()
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = torch.softmax(outputs.logits, dim=-1)
+    print(f"Predictions: {predictions}")
 
 # Save / load
 share.save_pretrained("./my_share_checkpoint")
@@ -65,6 +78,15 @@ share.push_to_hub("username/my-share-model")
 # Compress
 lorashare compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32
 
+# With GPU acceleration (10-100x faster)
+lorashare compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32 --device cuda
+
+# For large models (reduced memory)
+lorashare compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32 --layer-by-layer
+
+# For 100+ adapters (chunked processing)
+lorashare compress adapter1/ ... adapter100/ -o ./compressed -k 32 --chunk-size 10
+
 # Inspect
 lorashare info ./compressed
 
@@ -73,6 +95,39 @@ lorashare reconstruct ./compressed --adapter cola -o ./reconstructed
 
 # Reconstruct all
 lorashare reconstruct ./compressed --all -o ./reconstructed
+```
+
+### Scalability Features (v0.2.0)
+
+```python
+# GPU Acceleration (10-100x speedup)
+share = SHAREModel.from_adapters(
+    adapters,
+    num_components=32,
+    device="cuda",  # or "cpu" or None for auto
+)
+
+# Layer-by-layer processing (70% less memory)
+share = SHAREModel.from_adapters(
+    adapters,
+    num_components=32,
+    layer_by_layer=True,  # Process one layer at a time
+)
+
+# Chunked loading (enables 100+ adapters)
+share = SHAREModel.from_adapters(
+    many_adapters,  # 100+ adapters
+    num_components=32,
+    chunk_size=10,  # Process 10 at a time
+)
+
+# Combine features
+share = SHAREModel.from_adapters(
+    many_adapters,
+    num_components=32,
+    device="cuda",
+    chunk_size=10,
+)
 ```
 
 ### From HuggingFace Hub

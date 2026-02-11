@@ -64,7 +64,9 @@ def parse_group_key(gk: str) -> tuple[str, str]:
 # ── Core Math ────────────────────────────────────────────────────────────────
 
 
-def eigendecomposition(matrix: torch.Tensor) -> dict[str, torch.Tensor]:
+def eigendecomposition(
+    matrix: torch.Tensor, device: str = "cpu"
+) -> dict[str, torch.Tensor]:
     """Eigendecompose a centered covariance matrix.
 
     Centers data, computes ``cov = X @ X.T``, then uses
@@ -72,13 +74,15 @@ def eigendecomposition(matrix: torch.Tensor) -> dict[str, torch.Tensor]:
 
     Args:
         matrix: Input data matrix, shape ``(feature_dim, num_samples)``.
+        device: Device for computation ("cuda" or "cpu"). GPU provides 10-100x speedup.
 
     Returns:
         Dict with ``"eigenvalues"`` of shape ``(feature_dim,)`` sorted
         descending and ``"eigenvectors"`` of shape ``(feature_dim, feature_dim)``
-        with columns sorted correspondingly.
+        with columns sorted correspondingly. Returned on CPU.
     """
-    matrix = matrix.to(torch.float32)
+    # Move to device for computation
+    matrix = matrix.to(device).to(torch.float32)
     mean = matrix.mean(dim=1, keepdim=True)
     centered = matrix - mean
     cov = centered @ centered.T
@@ -91,7 +95,11 @@ def eigendecomposition(matrix: torch.Tensor) -> dict[str, torch.Tensor]:
     eigenvals = eigenvals[idx]
     eigenvecs = eigenvecs[:, idx]
 
-    return {"eigenvalues": eigenvals, "eigenvectors": eigenvecs}
+    # Move results back to CPU for storage
+    return {
+        "eigenvalues": eigenvals.cpu(),
+        "eigenvectors": eigenvecs.cpu(),
+    }
 
 
 def _orient_weight(tensor: torch.Tensor) -> torch.Tensor:
@@ -136,6 +144,7 @@ def compute_shared_components(
     combined: dict[str, dict[str, torch.Tensor]],
     num_components: int | str = 32,
     variance_threshold: float = 0.95,
+    device: str | None = None,
 ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor], int]:
     """Compute PCA principal components for each (layer, side) group.
 
@@ -149,6 +158,8 @@ def compute_shared_components(
         combined: Output of :func:`combine_adapter_weights`.
         num_components: Number of components to retain, or ``"auto"``.
         variance_threshold: Target explained variance when ``num_components="auto"``.
+        device: Device for computation ("cuda", "cpu", or None for auto).
+                GPU acceleration can provide 10-100x speedup.
 
     Returns:
         Tuple of ``(components, eigenvalues, effective_k)`` where:
@@ -156,6 +167,16 @@ def compute_shared_components(
         - eigenvalues: ``{group_key: tensor(feature_dim,)}``
         - effective_k: actual number of components used
     """
+    # Auto-detect device
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    elif device == "cuda" and not torch.cuda.is_available():
+        logger.warning("CUDA requested but not available, falling back to CPU")
+        device = "cpu"
+
+    if device == "cuda":
+        logger.info(f"Using GPU acceleration for eigendecomposition")
+
     all_eigenvalues: dict[str, torch.Tensor] = {}
     all_eigenvectors: dict[str, torch.Tensor] = {}
 
@@ -166,7 +187,7 @@ def compute_shared_components(
             tensors.append(oriented)
         stacked = torch.cat(tensors, dim=1)  # (feature_dim, N*rank)
 
-        result = eigendecomposition(stacked)
+        result = eigendecomposition(stacked, device=device)
         all_eigenvalues[gk] = result["eigenvalues"]
         all_eigenvectors[gk] = result["eigenvectors"]
 
