@@ -10,7 +10,7 @@ LoRA adapters trained on different tasks share a common low-rank subspace.
 
 Instead of storing N separate adapters, you can extract the shared principal components through PCA and keep only tiny per-adapter coefficients.
 
-Through **lorashare**, train your LoRAs and then compress them so you can store several task-specific models with the memory size of one adapter. 
+**lorashare** lets you train your LoRAs and then compress them so you can store several task-specific models with the memory size of one adapter. 
 
 ## Use Cases
 
