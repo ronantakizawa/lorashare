@@ -1,0 +1,168 @@
+# peft-share
+
+Compress multiple PEFT LoRA adapters into a shared subspace. **100x+ memory savings**, zero retraining.
+
+Based on the [SHARE paper](https://arxiv.org/abs/2602.06043) (Kaushik et al., 2026).
+
+## The Key Insight
+
+LoRA adapters trained on different tasks share a common low-rank subspace. Instead of storing N separate adapters, extract the shared principal components via PCA and keep only tiny per-adapter coefficients.
+
+**This is a post-processing step** — train your LoRAs however you want, then compress them after the fact. No custom training required.
+
+## Install
+
+```bash
+pip install peft-share
+```
+
+## Quick Start
+
+### Python API
+
+```python
+from peft_share import SHAREModel
+
+# Compress multiple LoRA adapters into shared subspace
+share = SHAREModel.from_adapters(
+    ["path/to/cola_lora", "path/to/mrpc_lora", "path/to/rte_lora"],
+    num_components=32,  # or "auto" for explained-variance selection
+)
+
+# See compression stats
+share.summary()
+
+# Reconstruct any adapter as standard PEFT LoRA
+share.reconstruct("cola_lora", output_dir="./reconstructed/cola")
+
+# Apply to base model for inference (returns standard PeftModel)
+from transformers import AutoModelForSequenceClassification
+base_model = AutoModelForSequenceClassification.from_pretrained("roberta-base")
+model = share.apply(base_model, adapter_name="cola_lora")
+
+# Save / load
+share.save_pretrained("./my_share_checkpoint")
+share = SHAREModel.from_pretrained("./my_share_checkpoint")
+
+# Push to HuggingFace Hub
+share.push_to_hub("username/my-share-model")
+```
+
+### CLI
+
+```bash
+# Compress
+peft-share compress adapter1/ adapter2/ adapter3/ -o ./compressed -k 32
+
+# Inspect
+peft-share info ./compressed
+
+# Reconstruct single adapter
+peft-share reconstruct ./compressed --adapter cola -o ./reconstructed
+
+# Reconstruct all
+peft-share reconstruct ./compressed --all -o ./reconstructed
+```
+
+### From HuggingFace Hub
+
+```python
+share = SHAREModel.from_adapters(
+    ["org/cola_lora", "org/mrpc_lora", "org/rte_lora"],
+    num_components="auto",
+    variance_threshold=0.95,
+)
+```
+
+## How It Works
+
+For each layer and side (A/B) across all adapters:
+
+1. **Stack** all adapters' LoRA weights into a matrix
+2. **Center** and compute covariance
+3. **Eigendecompose** via `torch.linalg.eigh` to find principal components
+4. **Project** each adapter onto the top-k components to get compact loadings
+5. **Reconstruct** on demand: `original ~= components @ loadings`
+
+### Memory Savings
+
+| | 6 LoRA adapters | SHARE (k=32) |
+|---|---|---|
+| Storage | 6 x full adapter | 1 shared basis + 6 tiny loadings |
+| Params per layer | 6 x (r x d) | 1 x (k x d) + 6 x (k x r) |
+| Example (d=768, r=8) | 73,728 | 52,224 (1.4x) |
+| Example (d=768, r=8, N=100) | 1,228,800 | 74,752 (16x) |
+
+Savings increase with more adapters. The paper reports 281x savings with 6 GLUE tasks.
+
+## Save Format
+
+```
+checkpoint/
+  share_config.json              # Compression metadata
+  shared_components.safetensors  # Shared PCA basis vectors
+  adapters/
+    cola/
+      loadings.safetensors       # Per-adapter projections (tiny)
+      adapter_meta.json          # Original PEFT config
+    mrpc/
+      loadings.safetensors
+      adapter_meta.json
+```
+
+## Requirements
+
+- Python >= 3.9
+- PyTorch >= 1.13
+- peft >= 0.6.0
+- transformers >= 4.30.0
+- safetensors >= 0.3.0
+
+## API Reference
+
+### `SHAREModel.from_adapters(adapters, num_components=32, variance_threshold=0.95)`
+
+Compress multiple PEFT LoRA adapters. Accepts local paths or HuggingFace Hub IDs.
+
+- `adapters`: `list[str]` or `dict[str, str]` (name -> path mapping)
+- `num_components`: `int` or `"auto"` for explained-variance selection
+- `variance_threshold`: target explained variance when using `"auto"` (default 0.95)
+
+### `SHAREModel.from_pretrained(path)`
+
+Load a saved SHARE checkpoint.
+
+### `share.reconstruct(adapter_name, output_dir=None)`
+
+Reconstruct a single adapter's LoRA weights. Optionally save as standard PEFT format.
+
+### `share.apply(base_model, adapter_name)`
+
+Reconstruct and apply adapter to a base model. Returns a standard `peft.PeftModel`.
+
+### `share.save_pretrained(output_dir)`
+
+Save SHARE checkpoint to disk.
+
+### `share.summary()`
+
+Print compression statistics.
+
+### `share.reconstruction_error(adapter_name, original_weights=None, original_path=None)`
+
+Compute per-layer reconstruction error (relative Frobenius norm).
+
+## Citation
+
+```bibtex
+@article{kaushik2026share,
+  title={Shared LoRA Subspaces for Almost Strict Continual Learning},
+  author={Kaushik, Prakhar and Vaidya, Ankit and Chaudhari, Shravan and Chellappa, Rama and Yuille, Alan},
+  journal={arXiv preprint arXiv:2602.06043},
+  year={2026}
+}
+```
+
+## License
+
+MIT

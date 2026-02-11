@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "peft-share"
+version = "0.1.0"
+description = "Compress multiple PEFT LoRA adapters into a shared subspace using the SHARE method"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+keywords = ["peft", "lora", "compression", "continual-learning", "share"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=1.13",
+    "safetensors>=0.3.0",
+    "huggingface-hub>=0.19.0",
+    "peft>=0.6.0",
+    "transformers>=4.30.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "ruff"]
+
+[project.scripts]
+peft-share = "peft_share.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/peft_share"]
