@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -111,19 +112,41 @@ def _load_local(adapter_path: str) -> tuple[dict[str, Any], str]:
     return config_dict, weights_path
 
 
-def _download_from_hub(repo_id: str) -> tuple[dict[str, Any], str]:
-    """Download adapter config and weights from HuggingFace Hub."""
+def _download_from_hub(
+    repo_id: str, max_retries: int = 3, backoff_base: float = 1.0,
+) -> tuple[dict[str, Any], str]:
+    """Download adapter config and weights from HuggingFace Hub.
+
+    Retries transient network errors with exponential backoff.
+    """
     from huggingface_hub import hf_hub_download
 
-    config_path = hf_hub_download(repo_id, "adapter_config.json")
+    def _download_with_retry(filename: str) -> str:
+        for attempt in range(max_retries):
+            try:
+                return hf_hub_download(repo_id, filename)
+            except (OSError, ConnectionError) as e:
+                if attempt < max_retries - 1:
+                    delay = backoff_base * (2 ** attempt)
+                    logger.warning(
+                        "Download %s/%s failed (attempt %d/%d): %s. "
+                        "Retrying in %.1fs...",
+                        repo_id, filename, attempt + 1, max_retries, e, delay,
+                    )
+                    time.sleep(delay)
+                else:
+                    raise
+        raise RuntimeError("unreachable")  # pragma: no cover
+
+    config_path = _download_with_retry("adapter_config.json")
     with open(config_path) as f:
         config_dict = json.load(f)
 
     # Try safetensors first, fall back to bin
     try:
-        weights_path = hf_hub_download(repo_id, "adapter_model.safetensors")
-    except Exception:
-        weights_path = hf_hub_download(repo_id, "adapter_model.bin")
+        weights_path = _download_with_retry("adapter_model.safetensors")
+    except (OSError, ConnectionError, FileNotFoundError):
+        weights_path = _download_with_retry("adapter_model.bin")
 
     return config_dict, weights_path
 
@@ -240,11 +263,13 @@ def load_share_checkpoint(
     dict[str, dict[str, torch.Tensor]],
     dict[str, dict[str, Any]],
     dict[str, dict[str, torch.Tensor]],
+    dict[str, str],
 ]:
     """Load SHARE compressed format from disk.
 
     Returns:
-        Tuple of (config, components, all_loadings, adapter_configs, all_classifier_heads).
+        Tuple of (config, components, all_loadings, adapter_configs,
+        all_classifier_heads, adapter_sources).
     """
     ckpt = Path(checkpoint_dir)
 
@@ -254,6 +279,7 @@ def load_share_checkpoint(
     all_loadings: dict[str, dict[str, torch.Tensor]] = {}
     adapter_configs: dict[str, dict[str, Any]] = {}
     all_classifier_heads: dict[str, dict[str, torch.Tensor]] = {}
+    adapter_sources: dict[str, str] = {}
 
     adapters_dir = ckpt / "adapters"
     if adapters_dir.exists():
@@ -275,8 +301,10 @@ def load_share_checkpoint(
                 with open(meta_path) as f:
                     meta = json.load(f)
                 adapter_configs[name] = meta.get("original_config", {})
+                if "original_adapter_path" in meta:
+                    adapter_sources[name] = meta["original_adapter_path"]
 
-    return config, components, all_loadings, adapter_configs, all_classifier_heads
+    return config, components, all_loadings, adapter_configs, all_classifier_heads, adapter_sources
 
 
 # ── Reconstructed Adapter I/O ────────────────────────────────────────────────

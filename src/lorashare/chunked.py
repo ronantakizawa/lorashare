@@ -28,6 +28,7 @@ def compress_chunked(
     variance_threshold: float,
     device: str | None,
     chunk_size: int = 10,
+    on_error: str = "raise",
 ) -> tuple[
     dict[str, torch.Tensor],  # components
     dict[str, dict[str, torch.Tensor]],  # all_loadings
@@ -44,6 +45,7 @@ def compress_chunked(
         variance_threshold: Target variance for auto selection.
         device: Device for computation.
         chunk_size: Number of adapters to process per chunk.
+        on_error: ``"raise"`` to abort on failure, ``"skip"`` to skip bad adapters.
 
     Returns:
         Tuple of (components, all_loadings, eigenvalues, k, configs, classifier_heads).
@@ -81,9 +83,15 @@ def compress_chunked(
         chunk_classifier_heads = {}
 
         for name, path in chunk_map.items():
-            weights, classifier_heads, config_dict, _ = load_peft_adapter(
-                path, adapter_name=name
-            )
+            try:
+                weights, classifier_heads, config_dict, _ = load_peft_adapter(
+                    path, adapter_name=name
+                )
+            except Exception as e:
+                if on_error == "skip":
+                    logger.warning("Skipping adapter %s: %s", name, e)
+                    continue
+                raise
             chunk_weights[name] = weights
             chunk_configs[name] = config_dict
             all_configs[name] = config_dict
@@ -91,12 +99,22 @@ def compress_chunked(
                 chunk_classifier_heads[name] = classifier_heads
                 all_classifier_heads[name] = classifier_heads
 
-        # Validate this chunk (first chunk sets the standard)
-        if i == 0:
-            validate_adapters(chunk_configs)
+        # Skip empty chunks (all adapters in chunk failed to load)
+        if not chunk_weights:
+            logger.warning("Chunk %d has no valid adapters, skipping", i + 1)
+            continue
+
+        # Validate this chunk
+        if not chunk_results:
+            # First chunk with results — needs at least 2 configs for validation,
+            # so combine with any previously loaded configs from skipped chunks
+            combined_configs = {**all_configs, **chunk_configs}
+            if len(combined_configs) >= 2:
+                validate_adapters(combined_configs)
         else:
-            # Validate new chunk against first adapter
-            validate_adapters({**{adapter_names[0]: all_configs[adapter_names[0]]}, **chunk_configs})
+            # Validate new chunk against first successful adapter
+            ref_name = next(iter(all_configs))
+            validate_adapters({**{ref_name: all_configs[ref_name]}, **chunk_configs})
 
         # Compress this chunk
         combined = combine_adapter_weights(chunk_weights)
@@ -124,6 +142,22 @@ def compress_chunked(
         gc.collect()
         if device == "cuda":
             torch.cuda.empty_cache()
+
+    if not chunk_results:
+        raise ValueError(
+            "No chunks had enough adapters to compress. "
+            "Need at least 2 valid adapters."
+        )
+
+    # Verify total adapter count across all chunks
+    total_adapters = sum(
+        len(cr["loadings"]) for cr in chunk_results
+    )
+    if total_adapters < 2:
+        raise ValueError(
+            f"Need at least 2 valid adapters, got {total_adapters} "
+            f"after skipping failures"
+        )
 
     logger.info("All chunks processed, merging results...")
 

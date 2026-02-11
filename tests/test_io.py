@@ -127,7 +127,7 @@ class TestShareCheckpointRoundTrip:
         save_share_checkpoint(out, config, components, all_loadings, adapter_configs)
 
         # Load
-        loaded_config, loaded_components, loaded_loadings, loaded_adapter_configs, loaded_classifier_heads = (
+        loaded_config, loaded_components, loaded_loadings, loaded_adapter_configs, loaded_classifier_heads, _ = (
             load_share_checkpoint(out)
         )
 
@@ -184,7 +184,7 @@ class TestShareCheckpointRoundTrip:
         save_share_checkpoint(out, config, components, all_loadings, adapter_configs, all_classifier_heads)
 
         # Load
-        _, _, _, _, loaded_classifier_heads = load_share_checkpoint(out)
+        _, _, _, _, loaded_classifier_heads, _ = load_share_checkpoint(out)
 
         # Verify classifier heads are preserved
         assert "cola" in loaded_classifier_heads

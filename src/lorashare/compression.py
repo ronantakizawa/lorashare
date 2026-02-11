@@ -293,6 +293,52 @@ def compute_adapter_loadings(
     return loadings
 
 
+def compute_explained_variance(
+    components: dict[str, torch.Tensor],
+    adapter_weights: dict[str, torch.Tensor],
+) -> dict[str, float]:
+    """Compute how well existing components explain a new adapter's weights.
+
+    For each layer group, computes::
+
+        explained = ||V @ V^T @ x||^2 / ||x||^2
+
+    where V is the component matrix and x is the oriented weight matrix.
+
+    Args:
+        components: ``{group_key: tensor(feature_dim, k)}``
+        adapter_weights: ``{full_peft_key: weight_tensor}`` for a single adapter.
+
+    Returns:
+        ``{group_key: float}`` explained variance ratio per layer group.
+    """
+    variances: dict[str, float] = {}
+    for full_key, weight in adapter_weights.items():
+        try:
+            layer_key, side = parse_lora_key(full_key)
+        except ValueError:
+            continue
+        gk = group_key(layer_key, side)
+        if gk not in components:
+            continue
+
+        comp = components[gk].to(torch.float32)  # (feature_dim, k)
+        w = _orient_weight(weight).to(torch.float32)  # (feature_dim, rank)
+
+        # Project onto component subspace and measure how much is preserved
+        projected = comp @ (comp.T @ w)  # (feature_dim, rank)
+
+        orig_norm_sq = torch.sum(w**2)
+        proj_norm_sq = torch.sum(projected**2)
+
+        if orig_norm_sq < 1e-12:
+            variances[gk] = 1.0
+        else:
+            variances[gk] = (proj_norm_sq / orig_norm_sq).item()
+
+    return variances
+
+
 def reconstruct_adapter_weights(
     components: dict[str, torch.Tensor],
     loadings: dict[str, torch.Tensor],
