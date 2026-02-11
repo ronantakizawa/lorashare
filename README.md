@@ -12,6 +12,15 @@ Instead of storing N separate adapters, you can extract the shared principal com
 
 Through **lorashare**, train your LoRAs and then compress them so you can store several task-specific models with the memory size of one adapter. 
 
+## Use Cases
+
+Use **lorashare** if you have:
+  - Multiple LoRA adapters (2+)
+  - Same base model 
+  - Same rank
+  - Same target modules
+  - Want to store them together
+
 ## Install
 
 ```bash
