@@ -1,14 +1,16 @@
 # lorashare
 
-Compress multiple PEFT LoRA adapters into a shared subspace. **100x+ memory savings**, zero retraining.
+A Python library that lets you use multiple LoRA adapters with **100x memory savings**. 
 
 Based on the [SHARE paper](https://arxiv.org/abs/2602.06043) (Kaushik et al., 2026).
 
 ## The Key Insight
 
-LoRA adapters trained on different tasks share a common low-rank subspace. Instead of storing N separate adapters, extract the shared principal components via PCA and keep only tiny per-adapter coefficients.
+LoRA adapters trained on different tasks share a common low-rank subspace. 
 
-**This is a post-processing step** — train your LoRAs however you want, then compress them after the fact. No custom training required.
+Instead of storing N separate adapters, you can extract the shared principal components through PCA and keep only tiny per-adapter coefficients.
+
+Through **lorashare**, train your LoRAs and then compress them so you can store several task-specific models with the memory size of one adapter. 
 
 ## Install
 
